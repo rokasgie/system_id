@@ -1,6 +1,12 @@
 import torch
 from dataclasses import dataclass
-# from typing import List
+from typing import List
+
+DEVICE = torch.device('cpu')
+
+
+def tensor(val):
+    return torch.tensor(float(val), requires_grad=True, device=DEVICE)
 
 
 @dataclass()
@@ -91,106 +97,91 @@ class Constants:
 
 @dataclass()
 class Timestep:
-    def __init__(self, prev_state: State, next_state: State, controls: Controls, dt):
+    def __init__(self, prev_state: State, next_state: State, controls: Controls, constants, dt):
         self.controls: Controls = controls
         self.prev_state: State = prev_state
         self.next_state: State = next_state
-        # self.constants: Constants = constants
+        self.constants: Constants = constants
         self.dt = dt
 
+    def getFyF(self):
+        return self.getFy(self.getFz(), True)
 
-class TimestepModel(torch.nn.Module):
-    def __init__(self, constants):
-        super(TimestepModel, self).__init__()
-        self.constants: Constants = constants
+    def getFyR(self):
+        return self.getFy(self.getFz(), False)
 
-    def getFyF(self, timestep: Timestep):
-        return self.getFy(timestep, self.getFz(timestep), True)
-
-    def getFyR(self, timestep: Timestep):
-        return self.getFy(timestep, self.getFz(timestep), False)
-
-    def getSlipAngle(self, timestep: Timestep, isFront=True):
+    def getSlipAngle(self, isFront=True):
         lever_arm_len = self.constants.KINEMATIC_L_ * self.constants.KINEMATIC_W_FRONT_
-        v_x = torch.max(tensor(1), timestep.prev_state.v_x)
+        v_x = torch.max(tensor(1), self.prev_state.v_x)
         if isFront:
-            return torch.atan((timestep.prev_state.v_y + lever_arm_len * timestep.prev_state.r) /
-                              (v_x - 0.5 + self.constants.FRONT_AXLE_WIDTH_ * timestep.prev_state.r)) \
-                   - timestep.controls.delta
+            return torch.atan((self.prev_state.v_y + lever_arm_len * self.prev_state.r) /
+                              (v_x - 0.5 + self.constants.FRONT_AXLE_WIDTH_ * self.prev_state.r)) \
+                   - self.controls.delta
         else:
-            return torch.atan((timestep.prev_state.v_y - lever_arm_len * timestep.prev_state.r) /
-                              (v_x - 0.5 + self.constants.REAR_AXLE_WIDTH_ * timestep.prev_state.r))
+            return torch.atan((self.prev_state.v_y - lever_arm_len * self.prev_state.r) /
+                              (v_x - 0.5 + self.constants.REAR_AXLE_WIDTH_ * self.prev_state.r))
 
     def getDownForceFront(self, Fz):
         return 0.5 * self.constants.KINEMATIC_W_FRONT_ * Fz
 
-    def getFy(self, timestep: Timestep, Fz, isFront=True):
-        slipAngle = self.getSlipAngle(timestep, isFront)
+    def getFy(self, Fz, isFront=True):
+        slipAngle = self.getSlipAngle(isFront)
         Fz_axle = self.getDownForceFront(Fz)
         mu = self.constants.TIRE_D_ * torch.sin(self.constants.TIRE_C_ * torch.atan(self.constants.TIRE_B_ *
             (tensor(1) - self.constants.TIRE_E_) * slipAngle + self.constants.TIRE_E_ * torch.atan(self.constants.TIRE_B_ * slipAngle)))
         return Fz_axle * mu
 
-    def getFDown(self, timestep: Timestep):
-        return self.constants.AERO_C_DOWN_ * timestep.prev_state.v_x ** 2
+    def getFDown(self, ):
+        return self.constants.AERO_C_DOWN_ * self.prev_state.v_x ** 2
 
-    def getFz(self, timestep: Timestep):
-        return self.constants.INERTIA_G_ * self.constants.INERTIA_M_ + self.getFDown(timestep)
+    def getFz(self, ):
+        return self.constants.INERTIA_G_ * self.constants.INERTIA_M_ + self.getFDown()
 
-    def getFdrag(self, timestep: Timestep):
-        return self.constants.AERO_C_DRAG_ * timestep.prev_state.v_x ** 2
+    def getFdrag(self, ):
+        return self.constants.AERO_C_DRAG_ * self.prev_state.v_x ** 2
 
-    def getFx(self, timestep: Timestep):
-        dc = torch.empty(timestep.prev_state.v_x.size(0), device=DEVICE)
-        for i in range(len(timestep.prev_state.v_x)):
-            dc[i] = 0 if timestep.prev_state.v_x[i] <= 0 and timestep.controls.dc[i] < 0 else timestep.controls.dc[i]
+    def getFx(self):
+        dc = 0 if self.prev_state.v_x <= 0 and self.controls.dc < 0 else self.controls.dc
+        return dc * self.constants.DRIVETRAIN_CM1_ - self.getFdrag() - self.constants.DRIVETRAIN_CR0_
 
-        # dc = 0 if timestep.prev_state.v_x <= 0 and timestep.controls.dc < 0 else timestep.controls.dc
-        return dc * self.constants.DRIVETRAIN_CM1_ - self.getFdrag(timestep) - self.constants.DRIVETRAIN_CR0_
-
-    def kinCorrection(self, timestep: Timestep, next_dyn_state:State):
-        v_x_dot = self.getFx(timestep) / (self.constants.INERTIA_M_ + self.constants.DRIVETRAIN_M_LON_)
-        v = torch.sqrt(timestep.prev_state.v_x ** 2 + timestep.prev_state.v_y ** 2)
+    def kinCorrection(self, next_dyn_state:State):
+        v_x_dot = self.getFx() / (self.constants.INERTIA_M_ + self.constants.DRIVETRAIN_M_LON_)
+        v = torch.sqrt(self.prev_state.v_x ** 2 + self.prev_state.v_y ** 2)
         v_blend = 0.5 * (v - 1.5)
         blend = torch.max(torch.min(tensor(1), v_blend), tensor(0))
 
-        next_dyn_state.v_x = blend * next_dyn_state.v_x + (tensor(1) - blend) * (timestep.prev_state.v_x + timestep.dt * v_x_dot)
+        next_dyn_state.v_x = blend * next_dyn_state.v_x + (tensor(1) - blend) * (self.prev_state.v_x + self.dt * v_x_dot)
 
-        v_y = torch.tan(timestep.controls.delta) * next_dyn_state.v_x * self.constants.KINEMATIC_L_R_ / self.constants.KINEMATIC_L_
-        r = torch.tan(timestep.controls.delta) * next_dyn_state.v_x / self.constants.KINEMATIC_L_
+        v_y = torch.tan(self.controls.delta) * next_dyn_state.v_x * self.constants.KINEMATIC_L_R_ / self.constants.KINEMATIC_L_
+        r = torch.tan(self.controls.delta) * next_dyn_state.v_x / self.constants.KINEMATIC_L_
 
         next_dyn_state.v_y = blend * next_dyn_state.v_y + (tensor(1) - blend) * v_y
         next_dyn_state.r = blend * next_dyn_state.r + (tensor(1) - blend) * r
 
         return next_dyn_state
 
-    def forward(self, timestep: Timestep, criterion):
-        x_dot = torch.cos(timestep.prev_state.yaw) * timestep.prev_state.v_x - \
-                torch.sin(timestep.prev_state.yaw) * timestep.prev_state.v_y
-        y_dot = torch.sin(timestep.prev_state.yaw) * timestep.prev_state.v_x + \
-                torch.cos(timestep.prev_state.yaw) * timestep.prev_state.v_y
-
-        yaw_dot = timestep.prev_state.r
-
-        v_x_dot = (timestep.prev_state.r - timestep.prev_state.v_y) - \
-                  (self.getFx(timestep) - torch.sin(timestep.prev_state.yaw) * 2 * self.getFyF(timestep)) / \
+    def forward(self, criterion):
+        x_dot = torch.cos(self.prev_state.yaw) * self.prev_state.v_x - torch.sin(self.prev_state.yaw) * self.prev_state.v_y
+        y_dot = torch.sin(self.prev_state.yaw) * self.prev_state.v_x + torch.cos(self.prev_state.yaw) * self.prev_state.v_y
+        yaw_dot = self.prev_state.r
+        v_x_dot = (self.prev_state.r - self.prev_state.v_y) - \
+                  (self.getFx() - torch.sin(self.prev_state.yaw) * 2 * self.getFyF()) / \
                   (self.constants.INERTIA_M_ + self.constants.DRIVETRAIN_M_LON_)
 
-        v_y_dot = (torch.cos(timestep.controls.delta) * 2 * self.getFyF(timestep) + 2 * self.getFyR(timestep)) / \
-                  self.constants.INERTIA_M_ - timestep.prev_state.r * timestep.prev_state.v_x
-
-        r_dot = ((torch.cos(timestep.controls.delta) * 2 * self.getFyF(timestep) * self.constants.KINEMATIC_L_F_) -
-                 (2 * self.getFyR(timestep) * self.constants.KINEMATIC_L_R_)) / self.constants.INERTIA_I_Z_
+        v_y_dot = (torch.cos(self.controls.delta) * 2 * self.getFyF() + 2 * self.getFyR()) / \
+                  self.constants.INERTIA_M_ - self.prev_state.r * self.prev_state.v_x
+        r_dot = ((torch.cos(self.controls.delta) * 2 * self.getFyF() * self.constants.KINEMATIC_L_F_) -
+                 (2 * self.getFyR() * self.constants.KINEMATIC_L_R_)) / self.constants.INERTIA_I_Z_
 
         dyn_state = State(x_dot, y_dot, yaw_dot, r_dot, v_x_dot, v_y_dot)
-        next_dyn_state = timestep.prev_state + dyn_state * timestep.dt
-        final_state = self.kinCorrection(timestep, next_dyn_state)
+        next_dyn_state = self.prev_state + dyn_state * self.dt
+        final_state = self.kinCorrection(next_dyn_state)
 
         # Calculate loss
-        loss_v_x = criterion(final_state.v_x, timestep.next_state.v_x)
-        loss_v_y = criterion(final_state.v_y, timestep.next_state.v_y)
-        loss_yaw = criterion(final_state.yaw, timestep.next_state.yaw)
-        loss_r = criterion(final_state.r, timestep.next_state.r)
+        loss_v_x = criterion(final_state.v_x, self.next_state.v_x)
+        loss_v_y = criterion(final_state.v_y, self.next_state.v_y)
+        loss_yaw = criterion(final_state.yaw, self.next_state.yaw)
+        loss_r = criterion(final_state.r, self.next_state.r)
 
         return loss_v_x + loss_v_y + loss_r + loss_yaw
 
