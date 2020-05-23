@@ -1,5 +1,6 @@
 import torch
 from dataclasses import dataclass
+from utils import tensor
 # from typing import List
 
 
@@ -141,11 +142,7 @@ class TimestepModel(torch.nn.Module):
         return self.constants.AERO_C_DRAG_ * timestep.prev_state.v_x ** 2
 
     def getFx(self, timestep: Timestep):
-        dc = torch.empty(timestep.prev_state.v_x.size(0), device=DEVICE)
-        for i in range(len(timestep.prev_state.v_x)):
-            dc[i] = 0 if timestep.prev_state.v_x[i] <= 0 and timestep.controls.dc[i] < 0 else timestep.controls.dc[i]
-
-        # dc = 0 if timestep.prev_state.v_x <= 0 and timestep.controls.dc < 0 else timestep.controls.dc
+        dc = 0 if timestep.prev_state.v_x <= 0 and timestep.controls.dc < 0 else timestep.controls.dc
         return dc * self.constants.DRIVETRAIN_CM1_ - self.getFdrag(timestep) - self.constants.DRIVETRAIN_CR0_
 
     def kinCorrection(self, timestep: Timestep, next_dyn_state:State):
