@@ -1,6 +1,8 @@
 import torch
 from dataclasses import dataclass
 from utils import tensor
+import torch.nn.functional as F
+import numpy as np
 # from typing import List
 
 
@@ -44,42 +46,43 @@ class Controls:
 
 @dataclass()
 class Constants:
-    INERTIA_G_: torch.tensor = tensor(0.01)
-    # INERTIA_G_: torch.tensor = tensor(9.81)
-    INERTIA_M_: torch.tensor = tensor(0.01)
-    # INERTIA_M_: torch.tensor = tensor(190)
-    INERTIA_I_Z_: torch.tensor = tensor(0.01)
-    # INERTIA_I_Z_: torch.tensor = tensor(110)
-    AERO_C_DOWN_: torch.tensor = tensor(0.01)
-    # AERO_C_DOWN_: torch.tensor = tensor(1.9032)
-    AERO_C_DRAG_: torch.tensor = tensor(0.01)
-    # AERO_C_DRAG_: torch.tensor = tensor(0.7)
-    KINEMATIC_L_: torch.tensor = tensor(0.01)
-    # KINEMATIC_L_: torch.tensor = tensor(1.53)
-    KINEMATIC_L_F_: torch.tensor = tensor(0.01)
-    # KINEMATIC_L_F_: torch.tensor = tensor(1.22)
-    KINEMATIC_L_R_: torch.tensor = tensor(0.01)
-    # KINEMATIC_L_R_: torch.tensor = tensor(1.22)
-    KINEMATIC_W_FRONT_: torch.tensor = tensor(0.01)
-    # KINEMATIC_W_FRONT_: torch.tensor = tensor(0.5)
-    FRONT_AXLE_WIDTH_: torch.tensor = tensor(0.01)
-    # FRONT_AXLE_WIDTH_: torch.tensor = tensor(1)
-    REAR_AXLE_WIDTH_: torch.tensor = tensor(0.01)
-    # REAR_AXLE_WIDTH_: torch.tensor = tensor(1)
-    TIRE_B_: torch.tensor = tensor(0.01)
-    # TIRE_B_: torch.tensor = tensor(12.56)
-    TIRE_C_: torch.tensor = tensor(0.01)
-    # TIRE_C_: torch.tensor = tensor(-1.38)
-    TIRE_D_: torch.tensor = tensor(0.01)
-    # TIRE_D_: torch.tensor = tensor(1.6)
-    TIRE_E_: torch.tensor = tensor(0.01)
-    # TIRE_E_: torch.tensor = tensor(-0.58)
-    DRIVETRAIN_CM1_: torch.tensor = tensor(0.01)
-    # DRIVETRAIN_CM1_: torch.tensor = tensor(5000)
-    DRIVETRAIN_CR0_: torch.tensor = tensor(0.01)
-    # DRIVETRAIN_CR0_: torch.tensor = tensor(180)
-    DRIVETRAIN_M_LON_: torch.tensor = tensor(0.01)
-    # DRIVETRAIN_M_LON_: torch.tensor = tensor(29.98)
+    INERTIA_G_: torch.tensor = tensor(9.81)
+    INERTIA_M_: torch.tensor = tensor(190)
+    INERTIA_I_Z_: torch.tensor = tensor(110)
+    AERO_C_DOWN_: torch.tensor = tensor(1.9032)
+    AERO_C_DRAG_: torch.tensor = tensor(0.7)
+    KINEMATIC_L_: torch.tensor = tensor(1.53)
+    KINEMATIC_L_F_: torch.tensor = tensor(1.22)
+    KINEMATIC_L_R_: torch.tensor = tensor(1.22)
+    KINEMATIC_W_FRONT_: torch.tensor = tensor(0.5)
+    FRONT_AXLE_WIDTH_: torch.tensor = tensor(1)
+    REAR_AXLE_WIDTH_: torch.tensor = tensor(1)
+    TIRE_B_: torch.tensor = tensor(12.56)
+    TIRE_C_: torch.tensor = tensor(-1.38)
+    TIRE_D_: torch.tensor = tensor(1.6)
+    TIRE_E_: torch.tensor = tensor(-0.58)
+    DRIVETRAIN_CM1_: torch.tensor = tensor(5000)
+    DRIVETRAIN_CR0_: torch.tensor = tensor(180)
+    DRIVETRAIN_M_LON_: torch.tensor = tensor(29.98)
+
+    # INERTIA_G_: torch.tensor = tensor(0.01)
+    # INERTIA_M_: torch.tensor = tensor(0.01)
+    # INERTIA_I_Z_: torch.tensor = tensor(0.01)
+    # AERO_C_DOWN_: torch.tensor = tensor(0.01)
+    # AERO_C_DRAG_: torch.tensor = tensor(0.01)
+    # KINEMATIC_L_: torch.tensor = tensor(0.01)
+    # KINEMATIC_L_F_: torch.tensor = tensor(0.01)
+    # KINEMATIC_L_R_: torch.tensor = tensor(0.01)
+    # KINEMATIC_W_FRONT_: torch.tensor = tensor(0.01)
+    # FRONT_AXLE_WIDTH_: torch.tensor = tensor(0.01)
+    # REAR_AXLE_WIDTH_: torch.tensor = tensor(0.01)
+    # TIRE_B_: torch.tensor = tensor(0.01)
+    # TIRE_C_: torch.tensor = tensor(0.01)
+    # TIRE_D_: torch.tensor = tensor(0.01)
+    # TIRE_E_: torch.tensor = tensor(0.01)
+    # DRIVETRAIN_CM1_: torch.tensor = tensor(0.01)
+    # DRIVETRAIN_CR0_: torch.tensor = tensor(0.01)
+    # DRIVETRAIN_M_LON_: torch.tensor = tensor(0.01)
 
     def as_list(self):
         return [self.INERTIA_G_, self.INERTIA_M_, self.INERTIA_I_Z_,
@@ -142,7 +145,12 @@ class TimestepModel(torch.nn.Module):
         return self.constants.AERO_C_DRAG_ * timestep.prev_state.v_x ** 2
 
     def getFx(self, timestep: Timestep):
-        dc = 0 if timestep.prev_state.v_x <= 0 and timestep.controls.dc < 0 else timestep.controls.dc
+        # dc = tensor(np.arrange(timestep.controls.dc.size(0)))
+        # for i in range(timestep.controls.dc.size(0)):
+            # dc[i] = 0 if timestep.prev_state.v_x[i] <= 0 and timestep.controls.dc[i] < 0 else timestep.controls.dc[i]
+
+        dc = timestep.controls.dc
+        # dc = 0 if timestep.prev_state.v_x <= 0 and timestep.controls.dc < 0 else timestep.controls.dc
         return dc * self.constants.DRIVETRAIN_CM1_ - self.getFdrag(timestep) - self.constants.DRIVETRAIN_CR0_
 
     def kinCorrection(self, timestep: Timestep, next_dyn_state:State):
@@ -183,11 +191,15 @@ class TimestepModel(torch.nn.Module):
         next_dyn_state = timestep.prev_state + dyn_state * timestep.dt
         final_state = self.kinCorrection(timestep, next_dyn_state)
 
+        # [F.relu(c) for c in self.constants.as_list()]
+
         # Calculate loss
+        loss_x = criterion(final_state.x, timestep.next_state.x)
+        loss_y = criterion(final_state.y, timestep.next_state.y)
         loss_v_x = criterion(final_state.v_x, timestep.next_state.v_x)
         loss_v_y = criterion(final_state.v_y, timestep.next_state.v_y)
         loss_yaw = criterion(final_state.yaw, timestep.next_state.yaw)
         loss_r = criterion(final_state.r, timestep.next_state.r)
 
-        return loss_v_x + loss_v_y + loss_r + loss_yaw
+        return loss_x + loss_y + loss_v_x + loss_v_y + loss_r + loss_yaw
 
