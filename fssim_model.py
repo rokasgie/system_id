@@ -1,19 +1,6 @@
 import torch
 from dataclasses import dataclass
-<<<<<<< HEAD
-from typing import List
-
-DEVICE = torch.device('cpu')
-
-
-def tensor(val):
-    return torch.tensor(float(val), requires_grad=True, device=DEVICE)
-=======
 from utils import tensor
-import torch.nn.functional as F
-import numpy as np
-# from typing import List
->>>>>>> use_pytorch_model
 
 
 @dataclass()
