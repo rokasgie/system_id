@@ -4,15 +4,9 @@ from lmfit import minimize, fit_report
 import numpy as np
 from lmfit_model import model, Timestep, State, Controls, get_parameters
 import pandas as pd
-from pandas import DataFrame
 
 parser = argparse.ArgumentParser(description="Simulation vehicle model verification")
-parser.add_argument("--file-path", type=str, required=True, help="Path to data file")
-parser.add_argument("--skip-first", type=int, default=1000, help="Skip first n lines")
-parser.add_argument("--no-samples", type=int, default=50000, help="Number of samples to use")
-parser.add_argument("--use-every", type=int, default=4, help="Use every nth sample")
-# parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
-# parser.add_argument("--cuda", action='store_true', help="Use cuda")
+parser.add_argument("--file-path", type=str, required=True, help="Path to csv data file")
 args = parser.parse_args()
 
 
@@ -46,40 +40,6 @@ def get_timesteps1(csv_file):
     controls = Controls(delta=getFloatArray(df_filtered['delta']), dc=getFloatArray(df_filtered['acc']))
 
     timestep = Timestep(curr_state, next_state, controls, getFloatArray(df_filtered['dt']))
-
-    return timestep
-
-
-def get_timesteps(csv_file, skip, no_samples, take_every):
-    reader = csv.DictReader(open(csv_file))
-    data = {}
-    for name in reader.fieldnames:
-        data[name] = []
-
-    i, j = 0, 0
-    for row in reader:
-        if i < skip:
-            i += 1
-            continue
-        elif len(data[reader.fieldnames[0]]) < no_samples:
-            if j == take_every:
-                j = 1
-                for key, value in row.items():
-                    data[key].append(value)
-            else:
-                j += 1
-        else:
-            break
-
-    curr_state = State(v_x=getFloatArray(data['current_v_x']), v_y=getFloatArray(data['current_v_y']),
-                       r=getFloatArray(data['current_r']))
-
-    next_state = State(v_x=getFloatArray(data['next_v_x']), v_y=getFloatArray(data['next_v_y']),
-                       r=getFloatArray(data['next_r']))
-
-    controls = Controls(delta=getFloatArray(data['delta']), dc=getFloatArray(data['acc']))
-
-    timestep = Timestep(curr_state, next_state, controls, getFloatArray(data['dt']))
 
     return timestep
 

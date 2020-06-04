@@ -1,7 +1,7 @@
 import numpy as np
 from lmfit import Parameters, Parameter
 from dataclasses import dataclass
-from typing import List
+
 
 @dataclass()
 class State:
@@ -40,23 +40,28 @@ parameters = Parameters()
 params = \
 [
     Parameter('INERTIA_G_', value=9.81, vary=False),
-    Parameter('INERTIA_M_', value=190, vary=False),
-    Parameter('INERTIA_I_Z_', value=110, min=0),
-    Parameter('AERO_C_DOWN_', value=1.9032, min=0),
-    Parameter('AERO_C_DRAG_', value=0.7, min=0),
+    Parameter('INERTIA_M_', value=190, vary=True),
+    Parameter('INERTIA_I_Z_', value=110, min=0, vary=False),
+
+    Parameter('AERO_C_DOWN_', value=2.5, min=0, vary=True),
+    Parameter('AERO_C_DRAG_', value=1, min=0, vary=True),
+
     Parameter('KINEMATIC_L_', value=1.53, vary=False),
     Parameter('KINEMATIC_L_F_', value=1.22, vary=False),
     Parameter('KINEMATIC_L_R_', value=1.22, vary=False),
     Parameter('KINEMATIC_W_FRONT_', value=0.5, vary=False),
+
     Parameter('FRONT_AXLE_WIDTH_', value=1.2, vary=False),
     Parameter('REAR_AXLE_WIDTH_', value=1.2, vary=False),
-    Parameter('TIRE_B_', value=12.56),
-    Parameter('TIRE_C_', value=-1.38),
-    Parameter('TIRE_D_', value=1.6),
-    Parameter('TIRE_E_', value=-0.58),
-    Parameter('DRIVETRAIN_CM1_', value=5000, min=0),
-    Parameter('DRIVETRAIN_CR0_', value=180, min=0),
-    Parameter('DRIVETRAIN_M_LON_', value=29.98, min=0)
+
+    Parameter('TIRE_B_', value=12.56, vary=False),
+    Parameter('TIRE_C_', value=-1.38, vary=False),
+    Parameter('TIRE_D_', value=1.6, vary=False),
+    Parameter('TIRE_E_', value=-0.58, vary=False),
+
+    Parameter('DRIVETRAIN_CM1_', value=5500, min=0, vary=True),
+    Parameter('DRIVETRAIN_CR0_', value=250, min=0, vary=True),
+    Parameter('DRIVETRAIN_M_LON_', value=35, min=0, vary=True)
 ]
 
 
@@ -141,7 +146,6 @@ def model(params, curr_state: State, next_state: State, controls: Controls, dt):
 
     yaw_dot = curr_state.r
 
-    # Changed yaw to r in this equation
     v_x_dot = (curr_state.r - curr_state.v_y) - \
               (getFx(params, curr_state, controls) - np.sin(curr_state.yaw) * 2 * getFyF(params, curr_state, controls)) / \
               (params['INERTIA_M_'] + params['DRIVETRAIN_M_LON_'])
@@ -156,8 +160,8 @@ def model(params, curr_state: State, next_state: State, controls: Controls, dt):
     final_state = kinCorrection(params, curr_state, controls, dt, next_dyn_state)
 
     # Calculate loss
-    loss_v_x = final_state.v_x - next_state.v_x
-    loss_v_y = final_state.v_y - next_state.v_y
-    loss_r = final_state.r - next_state.r
+    loss_v_x = np.sqrt(np.power(final_state.v_x - next_state.v_x, 2))
+    #loss_v_y = final_state.v_y - next_state.v_y
+    # loss_r = final_state.r - next_state.r
 
-    return loss_v_x + loss_v_y + loss_r
+    return loss_v_x
