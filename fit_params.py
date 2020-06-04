@@ -11,7 +11,7 @@ from dataset import TimestepDataset
 parser = argparse.ArgumentParser(description="Simulation vehicle model verification")
 parser.add_argument("--file-path", type=str, required=True, help="Path to data file")
 parser.add_argument("--skip-first", type=int, default=1000, help="Skip first n lines")
-parser.add_argument("--no-samples", type=int, default=50000, help="Number of samples to use")
+parser.add_argument("--no-samples", type=int, default=100, help="Number of samples to use")
 parser.add_argument("--use-every", type=int, default=4, help="Use every nth sample")
 parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
 parser.add_argument("--cuda", action='store_true', help="Use cuda")
