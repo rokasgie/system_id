@@ -3,165 +3,121 @@ from lmfit import Parameters, Parameter
 from dataclasses import dataclass
 
 
-@dataclass()
-class State:
-    #x: np.array # float
-    #y: np.array # float
-    r: np.array # float
-    yaw: np.array # float
+# Real parameters
+# inertia:
+#   m:        190.0   # Weight of the Vehicle [kg]
+#   g:        9.81    # Gravity force         [m/s^2]
+#   I_z:      110     # Inertial force I_zz
 
-    v_x: np.array # float
-    v_y: np.array # float
+# kinematics:
+#   l: 1.53           # Vehicle Length [m]
+#   b_F: 1.22         # From COG to front axle [m]
+#   b_R: 1.22         # From COG to rear axle [m]
+#   w_front: 0.5      # Percentage of weight front
 
-    def __add__(self, other):
-        return State(v_x=self.v_x + other.v_x, v_y=self.v_y + other.v_y,
-                     r=self.r + other.r, yaw=self.yaw + other.yaw)
+# tire:
+#   tire_coefficient: 1.0
+#   B: 12.56
+#   C: -1.38
+#   D: 1.60
+#   E: -0.58
+#   radius: 0.2525
+#   max_steering: 0.8727
 
-    def __mul__(self, val):
-        return State(v_x=self.v_x * val, v_y=self.v_y * val,
-                     r=self.r * val, yaw=self.yaw * val)
+# aero:
+#   C_Down: # F_Downforce = C_Downforce*v_x^2; C_Downforce = a*b*c
+#     a: 1.22
+#     b: 2.6
+#     c: 0.6
+#   C_drag: # F_Drag = C_Drag*v_x^2; C_drag = a*b*c
+#     a: 0.7
+#     b: 1.0
+#     c: 1.0
 
+# drivetrain:
+#   Cm1: 5000
+#   Cr0: 180
+#   inertia: 0.4 # wheel_plus_packaging
+#   r_dyn: 0.231
+#   nm_wheels: 4
 
-@dataclass()
-class Controls:
-    dc: np.array # float
-    delta: np.array # float
-
-
-@dataclass()
-class Timestep:
-    curr_state: State
-    next_state: State
-    controls: Controls
-    dt: np.array
-
-
-parameters = Parameters()
-params = \
-[
-    Parameter('INERTIA_G_', value=9.81, vary=False),
-    Parameter('INERTIA_M_', value=190, vary=True),
-    Parameter('INERTIA_I_Z_', value=110, min=0, vary=False),
-
-    Parameter('AERO_C_DOWN_', value=2.5, min=0, vary=True),
-    Parameter('AERO_C_DRAG_', value=1, min=0, vary=True),
-
-    Parameter('KINEMATIC_L_', value=1.53, vary=False),
-    Parameter('KINEMATIC_L_F_', value=1.22, vary=False),
-    Parameter('KINEMATIC_L_R_', value=1.22, vary=False),
-    Parameter('KINEMATIC_W_FRONT_', value=0.5, vary=False),
-
-    Parameter('FRONT_AXLE_WIDTH_', value=1.2, vary=False),
-    Parameter('REAR_AXLE_WIDTH_', value=1.2, vary=False),
-
-    Parameter('TIRE_B_', value=12.56, vary=False),
-    Parameter('TIRE_C_', value=-1.38, vary=False),
-    Parameter('TIRE_D_', value=1.6, vary=False),
-    Parameter('TIRE_E_', value=-0.58, vary=False),
-
-    Parameter('DRIVETRAIN_CM1_', value=5500, min=0, vary=True),
-    Parameter('DRIVETRAIN_CR0_', value=250, min=0, vary=True),
-    Parameter('DRIVETRAIN_M_LON_', value=35, min=0, vary=True)
-]
+# torque_vectoring:
+#   K_FFW: 2.1
+#   K_p: 500
+#   shrinkage: 0.8
+#   K_stability: 0.004
 
 
-def get_parameters():
-    for p in params:
-        parameters.add(p)
-    return parameters
+
+def getFDown(params: Parameters, data):
+    return params['AERO_C_DOWN_'] * (data.v_x ** 2)
 
 
-def getFDown(params: Parameters, curr_state: State):
-    return params['AERO_C_DOWN_'] * curr_state.v_x ** 2
+def getFz(params: Parameters, data):
+    return params['INERTIA_G_'] * params['INERTIA_M_'] + getFDown(params, data)
 
 
-def getFz(params: Parameters, curr_state: State):
-    return params['INERTIA_G_'] * params['INERTIA_M_'] + getFDown(params, curr_state)
-
-
-def getSlipAngle(params: Parameters, curr_state: State, controls: Controls, isFront=True):
+def getSlipAngle(params: Parameters, data, isFront=True):
     lever_arm_len = params['KINEMATIC_L_'] * params['KINEMATIC_W_FRONT_']
-    v_x = np.maximum(1, curr_state.v_x)
+    v_x = np.maximum(1, data.v_x)
     if isFront:
-        return np.arctan((curr_state.v_y + lever_arm_len * curr_state.r) /
-                       (v_x - 0.5 + params['FRONT_AXLE_WIDTH_'] * curr_state.r)) \
-               - controls.delta
+        return np.arctan2((data.v_y + lever_arm_len * data.r),
+                       v_x) \
+               - data.delta_cmd
     else:
-        return np.arctan((curr_state.v_y - lever_arm_len * curr_state.r) /
-                       (v_x - 0.5 + params['REAR_AXLE_WIDTH_'] * curr_state.r))
+        return np.arctan2((data.v_y - lever_arm_len * data.r),
+                       v_x)
 
 
 def getDownForceFront(params: Parameters, Fz):
     return 0.5 * params['KINEMATIC_W_FRONT_'] * Fz
 
 
-def getFy(params: Parameters, curr_state: State, controls: Controls, isFront=True):
-    Fz = getFz(params, curr_state)
-    slipAngle = getSlipAngle(params, curr_state, controls, isFront)
+def getFy(params: Parameters, data, isFront=True):
+    Fz = getFz(params, data)
+    slipAngle = getSlipAngle(params, data, isFront)
     Fz_axle = getDownForceFront(params, Fz)
-    mu = params['TIRE_D_'] * np.sin(params['TIRE_C_'] * np.arctan(params['TIRE_B_'] *
-                                            (1 - params['TIRE_E_']) * slipAngle + params['TIRE_E_']
-                                                                * np.arctan(params['TIRE_B_'] * slipAngle)))
+    B = params['TIRE_B_']
+    C = params['TIRE_C_']
+    D = params['TIRE_D_']
+    E = params['TIRE_E_']
+
+    mu = D * np.sin(C * np.arctan(B * (1.0 - E) * slipAngle + E * np.arctan(B * slipAngle)))
     return Fz_axle * mu
 
 
-def getFyF(params: Parameters, curr_state: State, controls: Controls):
-    return getFy(params, curr_state, controls, True)
+def getFyF(params: Parameters, data):
+    return getFy(params, data, True)
 
 
-def getFyR(params: Parameters, curr_state: State, controls: Controls):
-    return getFy(params, curr_state, controls, False)
+def getFyR(params: Parameters, data):
+    return getFy(params, data, False)
 
 
-def getFdrag(params: Parameters, curr_state: State):
-    return params['AERO_C_DRAG_'] * curr_state.v_x ** 2
+def getFdrag(params: Parameters, data):
+    return params['AERO_C_DRAG_'] * (data.v_x ** 2)
 
 
-def getFx(params: Parameters, curr_state: State, controls: Controls):
-    return controls.dc * params['DRIVETRAIN_CM1_'] - getFdrag(params, curr_state) - params['DRIVETRAIN_CR0_']
+def getFx(params: Parameters, data):
+    return data.acc_cmd * params['DRIVETRAIN_CM1_'] - getFdrag(params, data) - params['DRIVETRAIN_CR0_']
 
 
-def kinCorrection(params: Parameters, curr_state: State, controls: Controls, dt, next_dyn_state: State):
-    v_x_dot = getFx(params, curr_state, controls) / (params['INERTIA_M_'] + params['DRIVETRAIN_M_LON_'])
-    v = np.sqrt(curr_state.v_x ** 2 + curr_state.v_y ** 2)
-    v_blend = 0.5 * (v - 1.5)
-    blend = np.max(np.minimum(1, v_blend), 0)
+def model(params, data, data_dot):
 
-    next_dyn_state.v_x = blend * next_dyn_state.v_x + (1 - blend) * (curr_state.v_x + dt * v_x_dot)
+    Fx = getFx(params, data)
+    FyF_tot = 2*getFyF(params, data)
+    FyR_tot = 2*getFyR(params, data)
+    m_lon = params['INERTIA_M_'] + params['DRIVETRAIN_M_LON_']
 
-    v_y = np.tan(controls.delta) * next_dyn_state.v_x * params['KINEMATIC_L_R_'] / params['KINEMATIC_L_']
-    r = np.tan(controls.delta) * next_dyn_state.v_x / params['KINEMATIC_L_']
+    v_x_dot = (data.r * data.v_y) + (Fx - np.sin(data.yaw) * FyF_tot) / m_lon
 
-    next_dyn_state.v_y = blend * next_dyn_state.v_y + (1 - blend) * v_y
-    next_dyn_state.r = blend * next_dyn_state.r + (1 - blend) * r
+    v_y_dot = (np.cos(data.delta_cmd) * FyF_tot + FyR_tot) / params['INERTIA_M_'] - data.r * data.v_x
 
-    return next_dyn_state
-
-
-def model(params, curr_state: State, next_state: State, controls: Controls, dt):
-    # x_dot = np.cos(curr_state.yaw) * curr_state.v_x - np.sin(
-    #     curr_state.yaw) * curr_state.v_y
-    # y_dot = np.sin(curr_state.yaw) * curr_state.v_x + np.cos(
-    #     curr_state.yaw) * curr_state.v_y
-
-    yaw_dot = curr_state.r
-
-    v_x_dot = (curr_state.r - curr_state.v_y) - \
-              (getFx(params, curr_state, controls) - np.sin(curr_state.yaw) * 2 * getFyF(params, curr_state, controls)) / \
-              (params['INERTIA_M_'] + params['DRIVETRAIN_M_LON_'])
-
-    v_y_dot = (np.cos(controls.delta) * 2 * getFyF(params, curr_state, controls) + 2 * getFyR(params, curr_state, controls)) / \
-              params['INERTIA_M_'] - curr_state.r * curr_state.v_x
-    r_dot = ((np.cos(controls.delta) * 2 * getFyF(params, curr_state, controls) * params['KINEMATIC_L_F_']) -
-             (2 * getFyR(params, curr_state, controls) * params['KINEMATIC_L_R_'])) / params['INERTIA_I_Z_']
-
-    dyn_state = State(v_x_dot, v_y_dot, r_dot, yaw_dot)
-    next_dyn_state = curr_state + dyn_state * dt
-    final_state = kinCorrection(params, curr_state, controls, dt, next_dyn_state)
+    r_dot = (np.cos(data.delta_cmd) * FyF_tot * params['KINEMATIC_L_F_'] - FyR_tot * params['KINEMATIC_L_R_']) / params['INERTIA_I_Z_']
 
     # Calculate loss
-    loss_v_x = np.sqrt(np.power(final_state.v_x - next_state.v_x, 2))
-    #loss_v_y = final_state.v_y - next_state.v_y
-    # loss_r = final_state.r - next_state.r
+    loss_v_x = v_x_dot - data_dot.v_x_dot.values
+    loss_v_y = v_y_dot - data_dot.v_y_dot.values
+    loss_r = r_dot - data_dot.r_dot.values
 
-    return loss_v_x
+    return loss_v_x + loss_v_y + loss_r

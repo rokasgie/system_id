@@ -1,4 +1,3 @@
-import torch
 from dataclasses import dataclass
 from utils import tensor
 

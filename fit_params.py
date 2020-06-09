@@ -1,9 +1,6 @@
 import sys
 import argparse
 import csv
-import torch
-from torch.optim import Adam, SGD, LBFGS, RMSprop
-from torch.utils.data import DataLoader
 
 from fssim_model import Constants, State, Controls
 from dataset import TimestepDataset

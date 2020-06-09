@@ -1,9 +1,6 @@
 import csv
-import torch
-from torch.utils.data import Dataset
 from typing import List
 from fssim_model import Timestep, State, Controls, Constants
-from utils import tensor
 
 
 class TimestepDataset(Dataset):
