@@ -109,7 +109,7 @@ def model(params, data, data_dot):
     FyR_tot = 2*getFyR(params, data)
     m_lon = params['INERTIA_M_'] + params['DRIVETRAIN_M_LON_']
 
-    v_x_dot = (data.r * data.v_y) + (Fx - np.sin(data.yaw) * FyF_tot) / m_lon
+    v_x_dot = (data.r * data.v_y) + (Fx - np.sin(data.delta_cmd) * FyF_tot) / m_lon
     v_y_dot = (np.cos(data.delta_cmd) * FyF_tot + FyR_tot) / params['INERTIA_M_'] - data.r * data.v_x
     r_dot = (np.cos(data.delta_cmd) * FyF_tot * params['KINEMATIC_L_F_'] - FyR_tot * params['KINEMATIC_L_R_']) / params['INERTIA_I_Z_']
 
