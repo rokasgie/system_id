@@ -11,55 +11,20 @@ parser.add_argument("--n-data-to-use", type=int, required=True, help="Number of 
 args = parser.parse_args()
 
 
-def getFloatArray(x):
-    return np.array([float(i) for i in x])
-
-
-def filter_data(df):
-    df_filtered = df
-    df_filtered = df[df.current_v_x > 1]
-    df_filtered = df_filtered[np.abs(df_filtered.slip) < 0.75]
-    df_filtered = df_filtered[df_filtered.current_v_x < df_filtered.current_v_x.quantile(0.98)]
-    df_filtered = df_filtered[df_filtered.current_v_y < df_filtered.current_v_y.quantile(0.98)]
-    df_filtered = df_filtered[df_filtered.current_r < df_filtered.current_r.quantile(0.98)]
-
-    # df_filtered = df_filtered[::3]
-    return df_filtered
-
-
-def get_timesteps1(csv_file):
-    df = pd.read_csv(csv_file)
-    df["slip"] = -np.arctan2(df.current_v_y, np.abs(df.current_v_x))
-
-    df_filtered = filter_data(df)
-
-    curr_state = State(v_x=getFloatArray(df_filtered['current_v_x']), v_y=getFloatArray(df_filtered['current_v_y']),
-                       r=getFloatArray(df_filtered['current_r']), yaw=getFloatArray(df_filtered['current_yaw']))
-
-    next_state = State(v_x=getFloatArray(df_filtered['next_v_x']), v_y=getFloatArray(df_filtered['next_v_y']),
-                       r=getFloatArray(df_filtered['next_r']), yaw=getFloatArray(df_filtered['next_yaw']))
-
-    controls = Controls(delta=getFloatArray(df_filtered['delta']), dc=getFloatArray(df_filtered['acc']))
-
-    timestep = Timestep(curr_state, next_state, controls, getFloatArray(df_filtered['dt']))
-
-    return timestep
-
-
 if __name__ == "__main__":
     # Initilaise paramters
     parameters = [
         # Gravity is constant, keep this fixed
         Parameter('INERTIA_G_', value=9.81, vary=False),
-        Parameter('INERTIA_M_', value=190, vary=True, min=100, max=300),
-        Parameter('INERTIA_I_Z_', value=110, min=0, vary=True),
+        Parameter('INERTIA_M_', value=190, vary=False, min=100, max=300),
+        Parameter('INERTIA_I_Z_', value=110, min=70, max=150, vary=True),
 
-        Parameter('AERO_C_DOWN_', value=1.9032, min=0, vary=True),
-        Parameter('AERO_C_DRAG_', value=0.7, min=0, vary=True),
+        Parameter('AERO_C_DOWN_', value=1.9032, vary=True),
+        Parameter('AERO_C_DRAG_', value=0.7, vary=True),
 
         Parameter('KINEMATIC_L_', value=1.53, vary=False),
-        Parameter('KINEMATIC_L_F_', value=1.22, vary=False),
-        Parameter('KINEMATIC_L_R_', value=1.22, vary=False),
+        Parameter('KINEMATIC_L_F_', value=0.765, vary=False),
+        Parameter('KINEMATIC_L_R_', value=0.765, vary=False),
         Parameter('KINEMATIC_W_FRONT_', value=0.5, vary=False),
 
         Parameter('FRONT_AXLE_WIDTH_', value=1.2, vary=False),
@@ -71,8 +36,8 @@ if __name__ == "__main__":
         Parameter('TIRE_E_', value=-0.58, vary=True),
 
         # These parameter control the acceleration of the car so we leave them fixed
-        Parameter('DRIVETRAIN_CM1_', value=5000, min=0, vary=False),
-        Parameter('DRIVETRAIN_CR0_', value=180, min=0, vary=False),
+        Parameter('DRIVETRAIN_CM1_', value=5000, vary=False),
+        Parameter('DRIVETRAIN_CR0_', value=180, vary=False),
         Parameter('DRIVETRAIN_M_LON_', value=30, vary=False)
         # cType.m_lon_add = cType.nm_wheels * cType.inertia / (cType.r_dyn * cType.r_dyn);
     ]
@@ -111,6 +76,12 @@ if __name__ == "__main__":
     q1 = data.v_y_dot.quantile(0.975)
     data = data[q0 < data.v_y_dot]
     data = data[data.v_y_dot < q1]
+
+    # Filter outlier data from v_y_dot and r_dot axis
+    q0 = data.v_x_dot.quantile(0.01)
+    q1 = data.v_x_dot.quantile(0.99)
+    data = data[q0 < data.v_x_dot]
+    data = data[data.v_x_dot < q1]
     print("Data entires after filtering", len(data))
 
     # Save derivatives in a different data frame
