@@ -26,7 +26,7 @@ def filter_data(df):
     return df_filtered
 
 
-def get_timesteps1(csv_file):
+def get_timesteps(csv_file):
     df = pd.read_csv(csv_file)
 
     df_filtered = filter_data(df)
@@ -46,7 +46,7 @@ def get_timesteps1(csv_file):
 
 if __name__ == "__main__":
     parameters = get_parameters()
-    data = get_timesteps1(args.file_path)
+    data = get_timesteps(args.file_path)
     print("Running with {} samples".format(len(data.curr_state.v_x)))
     result = minimize(model, parameters, args=(data.curr_state, data.next_state, data.controls, data.dt))
     print(fit_report(result))
