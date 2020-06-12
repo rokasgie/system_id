@@ -53,7 +53,7 @@ if __name__ == "__main__":
     dt = data.dt.mean()
 
     # Remove not interesting/redundant columns
-    data = data.drop(["dt", "seq", "secs", "nsecs", "frame_id", "rosbagTimestamp", "front_slip_angle", "rear_slip_angle", "next_v_x", "next_v_y", "next_r", "next_yaw"], axis=1)
+    data = data.drop(["dt", "seq", "secs", "nsecs", "frame_id", "rosbagTimestamp", "front_slip_angle", "rear_slip_angle", "next_v_x", "next_v_y", "next_r"], axis=1)
 
     # Add slip angle
     data["slip"] = -np.arctan2(data.current_v_y, np.abs(data.current_v_x))
@@ -91,7 +91,6 @@ if __name__ == "__main__":
     renames = {"current_v_x": "v_x",
             "current_v_y": "v_y",
             "current_r": "r",
-            "current_yaw": "yaw",
             "delta": "delta_cmd",
             "acc": "acc_cmd"}
     data = data.rename(renames, axis=1)
