@@ -114,8 +114,15 @@ def model(params, data, data_dot):
     r_dot = (np.cos(data.delta_cmd) * FyF_tot * params['KINEMATIC_L_F_'] - FyR_tot * params['KINEMATIC_L_R_']) / params['INERTIA_I_Z_']
 
     # Calculate loss
-    loss_v_x = v_x_dot - data_dot.v_x_dot.values
-    loss_v_y = v_y_dot - data_dot.v_y_dot.values
-    loss_r = r_dot - data_dot.r_dot.values
+    loss_v_x = np.power(v_x_dot - data_dot.v_x_dot.values, 2)
+    loss_v_y = np.power(v_y_dot - data_dot.v_y_dot.values, 2)
+    loss_r = np.power(r_dot - data_dot.r_dot.values, 2)
 
-    return loss_v_x + loss_v_y + loss_r
+    return (loss_v_x + loss_v_y + loss_r) / 3
+
+    # Calculate loss
+    # loss_v_x = v_x_dot - data_dot.v_x_dot.values
+    # loss_v_y = v_y_dot - data_dot.v_y_dot.values
+    # loss_r = r_dot - data_dot.r_dot.values
+    #
+    # return loss_v_x + loss_v_y + loss_r

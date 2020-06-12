@@ -7,7 +7,7 @@ import pandas as pd
 
 parser = argparse.ArgumentParser(description="Simulation vehicle model verification")
 parser.add_argument("--file-path", type=str, required=True, help="Path to csv data file")
-parser.add_argument("--n-data-to-use", type=int, required=True, help="Number of data points to use")
+parser.add_argument("--n-data", type=int, required=True, help="Number of data points to use")
 args = parser.parse_args()
 
 
@@ -97,9 +97,9 @@ if __name__ == "__main__":
     data = data.rename(renames, axis=1)
 
     # Use only a subset of all data to make this finish in a sensible time
-    data = data[:args.n_data_to_use]
-    data_dot = data_dot[:args.n_data_to_use]
-    print("Using only first {} data entries".format(args.n_data_to_use))
+    data = data[:args.n_data]
+    data_dot = data_dot[:args.n_data]
+    print("Using only first {} data entries".format(args.n_data))
 
     # Fit model
     print("Starting fitting...")
